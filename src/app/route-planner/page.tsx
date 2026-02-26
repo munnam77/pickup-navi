@@ -1,7 +1,7 @@
 "use client";
 import AppShell from "@/components/AppShell";
 import db from "@/data/db.json";
-import { capacityAwareClustering, optimizeRoute, distance, memberWalkingInfo } from "@/lib/routing";
+import { capacityAwareClustering, optimizeRoute, distance, memberWalkingInfo, snapToNearestLocation } from "@/lib/routing";
 import { useState, useMemo, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import {
@@ -32,13 +32,8 @@ interface GeneratedRoute {
   walkingInfo: { id: string; name: string; distanceMeters: number; walkingMinutes: number; warning: boolean }[];
 }
 
-// Nearby landmark names for generated pickup points
-const landmarkNames = [
-  "駅前ロータリー", "区役所前", "公園北口", "交差点角", "バス停前",
-  "商店街入口", "郵便局前", "コンビニ駐車場", "病院正門前", "スーパー前",
-  "図書館前", "小学校前", "神社前", "銀行前", "薬局前",
-  "ガソリンスタンド前", "歩道橋下", "交番前", "消防署前", "マンション前",
-];
+// Curated pickup locations from db.json (real landmarks)
+const pickupLocations = db.pickupLocations || [];
 
 export default function RoutePlannerPage() {
   return (
@@ -87,17 +82,19 @@ function RoutePlannerContent() {
     // If wheelchair members exist, ensure they go to accessible vehicles
     const accessibleVehicleIds = activeVehicles.filter((v) => v.wheelchairAccessible).map((v) => v.id);
 
+    const usedLocationIds: string[] = [];
     const routes: GeneratedRoute[] = clusters.map((cluster, idx) => {
       const vehicleId = activeVehicles[idx]?.id || activeVehicles[0].id;
       const memberIds = cluster.points.map((p) => p.id);
 
-      // Generate pickup point name
-      const pickupName = landmarkNames[idx % landmarkNames.length];
+      // Snap centroid to nearest real pickup location
+      const snapped = snapToNearestLocation(cluster.centroid, pickupLocations, usedLocationIds);
+      usedLocationIds.push(snapped.id);
 
       const pickupPoint = {
-        name: pickupName,
-        lat: cluster.centroid.lat,
-        lng: cluster.centroid.lng,
+        name: snapped.name,
+        lat: snapped.lat,
+        lng: snapped.lng,
       };
 
       // Optimize route: temple -> pickup points ONLY -> return to temple
@@ -110,7 +107,7 @@ function RoutePlannerContent() {
       // Calculate walking distance for each member to their pickup point
       const memberDetails = cluster.points.map((p) => {
         const member = db.members.find((m) => m.id === p.id);
-        return { id: p.id, lat: p.lat, lng: p.lng, name: member?.name || "" };
+        return { id: p.id, lat: p.lat, lng: p.lng, name: member?.name || "", mobility: member?.mobility || "normal" };
       });
       const walkingInfo = memberWalkingInfo(memberDetails, pickupPoint);
 
@@ -151,6 +148,28 @@ function RoutePlannerContent() {
   }
 
   function saveRoute() {
+    if (!generated || !event) return;
+    const savedRoute = {
+      id: `r-${Date.now()}`,
+      eventId: event.id,
+      eventName: event.name,
+      date: event.date,
+      routes: generated.map((rt) => ({
+        vehicleId: rt.vehicleId,
+        members: rt.members,
+        pickupPoints: rt.pickupPoints,
+        estimatedTime: rt.estimatedTime,
+        distance: rt.distance,
+        walkingInfo: rt.walkingInfo,
+      })),
+      totalMembers: generated.reduce((s, r) => s + r.members.length, 0),
+      status: "active" as const,
+    };
+    const stored = JSON.parse(localStorage.getItem("pn-saved-routes") || "[]");
+    // Remove existing route for same event
+    const filtered = stored.filter((r: { eventId: string }) => r.eventId !== event.id);
+    filtered.push(savedRoute);
+    localStorage.setItem("pn-saved-routes", JSON.stringify(filtered));
     setSaved(true);
   }
 
@@ -451,7 +470,7 @@ function RoutePlannerContent() {
               <div className="bg-white rounded-xl border border-slate-200 p-12 text-center">
                 <Route size={40} className="mx-auto text-slate-300 mb-3" />
                 <p className="text-sm text-slate-500">行事と車両を選択し、「最適ルート生成」ボタンを押してください</p>
-                <p className="text-xs text-slate-400 mt-1">K-meansクラスタリング + 巡回セールスマン問題で最適化します</p>
+                <p className="text-xs text-slate-400 mt-1">檀家様の住所と車両の定員をもとに、最適な集合場所と走行ルートを自動計算します</p>
               </div>
             )}
           </div>

@@ -3,20 +3,46 @@ import AppShell from "@/components/AppShell";
 import db from "@/data/db.json";
 import { Route, Clock, MapPin, Users, Truck, ChevronRight } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+
+interface RouteEntry {
+  id: string;
+  eventId: string;
+  eventName: string;
+  date: string;
+  routes: {
+    vehicleId: string;
+    members: string[];
+    pickupPoints: { name: string; lat: number; lng: number }[];
+    estimatedTime: number;
+    distance: number;
+  }[];
+  totalMembers: number;
+  status: string;
+}
 
 export default function RoutesPage() {
   const router = useRouter();
+  const [allRoutes, setAllRoutes] = useState<RouteEntry[]>(db.savedRoutes as RouteEntry[]);
+
+  useEffect(() => {
+    const stored = JSON.parse(localStorage.getItem("pn-saved-routes") || "[]") as RouteEntry[];
+    // Merge: db.json routes + localStorage routes (no duplicates by eventId)
+    const dbEventIds = new Set(db.savedRoutes.map((r) => r.eventId));
+    const lsOnly = stored.filter((r) => !dbEventIds.has(r.eventId));
+    setAllRoutes([...lsOnly, ...(db.savedRoutes as RouteEntry[])]);
+  }, []);
 
   return (
     <AppShell>
       <div className="max-w-5xl mx-auto animate-fadeIn">
         <div className="mb-6">
           <h1 className="text-xl font-bold text-slate-900">ルート履歴</h1>
-          <p className="text-sm text-slate-500">{db.savedRoutes.length}件のルート</p>
+          <p className="text-sm text-slate-500">{allRoutes.length}件のルート</p>
         </div>
 
         <div className="space-y-4">
-          {db.savedRoutes.map((r) => (
+          {allRoutes.map((r) => (
             <div
               key={r.id}
               className="bg-white rounded-xl border border-slate-200 p-5 hover:shadow-sm transition cursor-pointer"
@@ -30,6 +56,9 @@ export default function RoutesPage() {
                   <h3 className="font-semibold text-slate-900">{r.eventName}</h3>
                   <p className="text-sm text-slate-500">{r.date}</p>
                 </div>
+                {r.status === "active" && (
+                  <span className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-medium">新規</span>
+                )}
                 <ChevronRight size={20} className="text-slate-400" />
               </div>
 
@@ -75,7 +104,7 @@ export default function RoutesPage() {
             </div>
           ))}
 
-          {db.savedRoutes.length === 0 && (
+          {allRoutes.length === 0 && (
             <div className="py-12 text-center text-slate-400 text-sm bg-white rounded-xl border border-slate-200">
               ルート履歴がありません
             </div>

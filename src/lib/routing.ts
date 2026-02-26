@@ -200,19 +200,49 @@ export function optimizeRoute(
   return { ordered, totalDistance: Math.round(totalDist * 10) / 10, estimatedMinutes };
 }
 
+// Snap a centroid to the nearest real pickup location
+export function snapToNearestLocation(
+  centroid: { lat: number; lng: number },
+  locations: { id: string; name: string; lat: number; lng: number }[],
+  usedLocationIds: string[] = []
+): { id: string; name: string; lat: number; lng: number } {
+  const available = locations.filter((l) => !usedLocationIds.includes(l.id));
+  if (available.length === 0) return { id: "fallback", name: "集合場所", ...centroid };
+
+  let best = available[0];
+  let bestDist = distance(centroid, available[0]);
+  for (let i = 1; i < available.length; i++) {
+    const d = distance(centroid, available[i]);
+    if (d < bestDist) {
+      bestDist = d;
+      best = available[i];
+    }
+  }
+  return best;
+}
+
+// Mobility-aware walking distance thresholds (meters)
+export const WALKING_THRESHOLDS: Record<string, number> = {
+  wheelchair: 100,
+  walker: 200,
+  cane: 300,
+  normal: 500,
+};
+
 // Calculate walking info for each member to their assigned pickup point
 export function memberWalkingInfo(
-  members: { id: string; lat: number; lng: number; name: string }[],
+  members: { id: string; lat: number; lng: number; name: string; mobility?: string }[],
   pickupPoint: { lat: number; lng: number }
 ): { id: string; name: string; distanceMeters: number; walkingMinutes: number; warning: boolean }[] {
   return members.map((m) => {
     const meters = walkingDistanceMeters(m, pickupPoint);
+    const threshold = WALKING_THRESHOLDS[m.mobility || "normal"] || 500;
     return {
       id: m.id,
       name: m.name,
       distanceMeters: meters,
       walkingMinutes: walkingTimeMinutes(meters),
-      warning: meters > 500, // 500m = client spec "徒歩圏内"
+      warning: meters > threshold,
     };
   });
 }
