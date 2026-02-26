@@ -221,8 +221,8 @@ function RoutePlannerContent() {
         </div>
 
         <div className="grid lg:grid-cols-3 gap-6">
-          {/* Left Panel: Controls */}
-          <div className="lg:col-span-1 space-y-4">
+          {/* Left Panel: Controls — shows after map on mobile */}
+          <div className="lg:col-span-1 space-y-4 order-2 lg:order-1">
             {/* Event Selection */}
             <div className={`bg-white rounded-xl border-2 p-4 transition-all ${
               currentStep === 1 ? "border-orange-300 shadow-md shadow-orange-50" : "border-slate-200"
@@ -371,8 +371,8 @@ function RoutePlannerContent() {
             )}
           </div>
 
-          {/* Right Panel: Map + Results */}
-          <div className="lg:col-span-2 space-y-4">
+          {/* Right Panel: Map + Results — shows first on mobile for context */}
+          <div className="lg:col-span-2 space-y-4 order-1 lg:order-2">
             {/* Map */}
             <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
               <div className="h-[350px] lg:h-[420px]">

@@ -82,6 +82,7 @@ export default function RouteDetailPage() {
         <div className="flex items-center gap-3 mb-6">
           <button
             onClick={() => router.push("/routes")}
+            aria-label="ルート一覧に戻る"
             className="w-10 h-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center hover:bg-slate-50 transition cursor-pointer shrink-0"
           >
             <ArrowLeft size={18} className="text-slate-600" />
@@ -92,6 +93,7 @@ export default function RouteDetailPage() {
           </div>
           <button
             onClick={() => window.print()}
+            aria-label="このルートを印刷する"
             className="flex items-center gap-1.5 text-sm text-slate-600 bg-white border border-slate-200 px-4 py-2.5 rounded-xl hover:bg-slate-50 transition cursor-pointer print:hidden font-medium shrink-0"
           >
             <Printer size={16} />
@@ -226,7 +228,7 @@ export default function RouteDetailPage() {
                           <p className="text-sm font-semibold text-slate-900">{m.name}</p>
                           <p className="text-xs text-slate-500 truncate">{m.address}</p>
                         </div>
-                        <a href={`tel:${m.phone}`} className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600 hover:bg-blue-100 transition print:hidden shrink-0">
+                        <a href={`tel:${m.phone}`} aria-label={`${m.name}に電話する`} className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600 hover:bg-blue-100 transition print:hidden shrink-0">
                           <Phone size={16} />
                         </a>
                         <span className="hidden print:inline text-xs text-slate-500">{m.phone}</span>

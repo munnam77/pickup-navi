@@ -158,6 +158,60 @@ export default function DashboardPage() {
           </div>
         )}
 
+        {/* Driver Quick Access — show assigned vehicle + next route */}
+        {userRole === "driver" && (
+          <div className="mb-6">
+            <h2 className="font-bold text-lg text-slate-900 flex items-center gap-2 mb-4">
+              <Truck size={20} className="text-blue-600" />
+              あなたの担当情報
+            </h2>
+            {(() => {
+              // Find driver's vehicle
+              const driverVehicle = db.vehicles.find((v) => v.driver === userName || v.driver.includes(userName.replace("運転手", "")));
+              if (!driverVehicle) return (
+                <div className="bg-white rounded-xl border border-slate-200 p-5 text-center">
+                  <p className="text-sm text-slate-400">担当車両が割り当てられていません</p>
+                </div>
+              );
+              // Find routes that use this vehicle
+              const driverRoutes = allRoutes.filter((r) => r.routes.some((rt) => rt.vehicleId === driverVehicle.id));
+              return (
+                <div className="space-y-3">
+                  <div className="bg-white rounded-xl border-2 border-blue-200 p-4 flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: driverVehicle.color + "18" }}>
+                      <Truck size={22} style={{ color: driverVehicle.color }} />
+                    </div>
+                    <div>
+                      <p className="font-bold text-base text-slate-900">{driverVehicle.name}</p>
+                      <p className="text-sm text-slate-500">定員{driverVehicle.capacity}名 {driverVehicle.wheelchairAccessible ? "· ♿車椅子対応" : ""}</p>
+                    </div>
+                  </div>
+                  {driverRoutes.length > 0 ? driverRoutes.map((r) => (
+                    <div
+                      key={r.id}
+                      onClick={() => router.push(`/routes/${r.id}`)}
+                      className="bg-white rounded-xl border border-slate-200 p-4 cursor-pointer hover:shadow-sm transition active:bg-slate-50 flex items-center gap-3"
+                    >
+                      <div className="w-10 h-10 rounded-xl bg-violet-100 flex items-center justify-center shrink-0">
+                        <Route size={18} className="text-violet-600" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-sm text-slate-900">{r.eventName}</p>
+                        <p className="text-sm text-slate-500">{r.date} · {r.totalMembers}名</p>
+                      </div>
+                      <span className="text-sm text-blue-600 font-medium shrink-0">詳細を見る →</span>
+                    </div>
+                  )) : (
+                    <div className="bg-slate-50 rounded-xl p-4 text-center">
+                      <p className="text-sm text-slate-400">まだ担当ルートがありません</p>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+          </div>
+        )}
+
         <div className="grid lg:grid-cols-2 gap-6">
           {/* Upcoming Events */}
           <div className="bg-white rounded-xl border border-slate-200 p-5">
