@@ -1,5 +1,6 @@
 // K-means clustering for grouping members into vehicle-based pickup groups
 // Nearest-neighbor TSP for route optimization within each cluster
+// Capacity-aware clustering to respect vehicle seat limits
 
 interface Point {
   id: string;
@@ -12,7 +13,7 @@ interface Cluster {
   points: Point[];
 }
 
-function distance(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
+export function distance(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
   const R = 6371;
   const dLat = ((b.lat - a.lat) * Math.PI) / 180;
   const dLng = ((b.lng - a.lng) * Math.PI) / 180;
@@ -20,6 +21,16 @@ function distance(a: { lat: number; lng: number }, b: { lat: number; lng: number
   const sinLng = Math.sin(dLng / 2);
   const a1 = sinLat * sinLat + Math.cos((a.lat * Math.PI) / 180) * Math.cos((b.lat * Math.PI) / 180) * sinLng * sinLng;
   return R * 2 * Math.atan2(Math.sqrt(a1), Math.sqrt(1 - a1));
+}
+
+// Walking distance in meters between two coordinates
+export function walkingDistanceMeters(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
+  return Math.round(distance(a, b) * 1000 * 1.3); // 1.3x multiplier for road vs straight-line
+}
+
+// Walking time in minutes (assumes 4 km/h walking speed for elderly)
+export function walkingTimeMinutes(meters: number): number {
+  return Math.round(meters / (4000 / 60)); // 4km/h = ~67m/min
 }
 
 export function kMeansClustering(points: Point[], k: number, maxIter = 20): Cluster[] {
@@ -80,15 +91,88 @@ export function kMeansClustering(points: Point[], k: number, maxIter = 20): Clus
   return clusters.filter((c) => c.points.length > 0);
 }
 
-// Nearest-neighbor TSP: start from temple, visit all pickup points, return to temple
+// Capacity-aware clustering: respects vehicle seat limits
+export function capacityAwareClustering(
+  points: Point[],
+  vehicleCapacities: number[]
+): Cluster[] {
+  const k = vehicleCapacities.length;
+  let clusters = kMeansClustering(points, k);
+
+  // Sort clusters by size (largest first) and capacities (largest first)
+  const sortedCapacities = [...vehicleCapacities].sort((a, b) => b - a);
+  clusters.sort((a, b) => b.points.length - a.points.length);
+
+  // Rebalance: if any cluster exceeds its vehicle capacity, move excess to nearest under-capacity cluster
+  for (let pass = 0; pass < 3; pass++) {
+    let rebalanced = false;
+    for (let i = 0; i < clusters.length; i++) {
+      const cap = sortedCapacities[i] || sortedCapacities[sortedCapacities.length - 1];
+      while (clusters[i].points.length > cap) {
+        // Find the point farthest from centroid
+        let farthestIdx = 0;
+        let farthestDist = 0;
+        for (let j = 0; j < clusters[i].points.length; j++) {
+          const d = distance(clusters[i].points[j], clusters[i].centroid);
+          if (d > farthestDist) {
+            farthestDist = d;
+            farthestIdx = j;
+          }
+        }
+        const point = clusters[i].points.splice(farthestIdx, 1)[0];
+
+        // Find nearest under-capacity cluster
+        let bestCluster = -1;
+        let bestDist = Infinity;
+        for (let j = 0; j < clusters.length; j++) {
+          if (j === i) continue;
+          const jCap = sortedCapacities[j] || sortedCapacities[sortedCapacities.length - 1];
+          if (clusters[j].points.length >= jCap) continue;
+          const d = distance(point, clusters[j].centroid);
+          if (d < bestDist) {
+            bestDist = d;
+            bestCluster = j;
+          }
+        }
+
+        if (bestCluster >= 0) {
+          clusters[bestCluster].points.push(point);
+          rebalanced = true;
+        } else {
+          // No room anywhere — put it back
+          clusters[i].points.push(point);
+          break;
+        }
+      }
+    }
+
+    // Recalculate centroids after rebalance
+    if (rebalanced) {
+      for (const c of clusters) {
+        if (c.points.length === 0) continue;
+        c.centroid = {
+          lat: c.points.reduce((s, p) => s + p.lat, 0) / c.points.length,
+          lng: c.points.reduce((s, p) => s + p.lng, 0) / c.points.length,
+        };
+      }
+    } else {
+      break;
+    }
+  }
+
+  return clusters.filter((c) => c.points.length > 0);
+}
+
+// Nearest-neighbor TSP: start from temple, visit only PICKUP POINTS, return to temple
+// Does NOT visit member homes — members WALK to pickup points
 export function optimizeRoute(
   start: { lat: number; lng: number },
-  points: { lat: number; lng: number; name?: string }[]
-): { ordered: typeof points; totalDistance: number; estimatedMinutes: number } {
-  if (points.length === 0) return { ordered: [], totalDistance: 0, estimatedMinutes: 0 };
+  pickupPoints: { lat: number; lng: number; name?: string }[]
+): { ordered: typeof pickupPoints; totalDistance: number; estimatedMinutes: number } {
+  if (pickupPoints.length === 0) return { ordered: [], totalDistance: 0, estimatedMinutes: 0 };
 
-  const remaining = [...points];
-  const ordered: typeof points = [];
+  const remaining = [...pickupPoints];
+  const ordered: typeof pickupPoints = [];
   let current = start;
   let totalDist = 0;
 
@@ -107,40 +191,28 @@ export function optimizeRoute(
     ordered.push(remaining.splice(bestIdx, 1)[0]);
   }
 
-  // Add return to start
+  // Add return to temple
   totalDist += distance(current, start);
 
-  // Estimate time: avg 25 km/h in city + 3 min per stop
-  const estimatedMinutes = Math.round((totalDist / 25) * 60 + ordered.length * 3);
+  // Estimate time: avg 25 km/h in city + 5 min per stop (loading elderly passengers)
+  const estimatedMinutes = Math.round((totalDist / 25) * 60 + ordered.length * 5);
 
   return { ordered, totalDistance: Math.round(totalDist * 10) / 10, estimatedMinutes };
 }
 
-// Generate optimal pickup points from clustered member addresses
-export function generatePickupPoints(
+// Calculate walking info for each member to their assigned pickup point
+export function memberWalkingInfo(
   members: { id: string; lat: number; lng: number; name: string }[],
-  numVehicles: number,
-  temple: { lat: number; lng: number }
-) {
-  const clusters = kMeansClustering(members, numVehicles);
-
-  return clusters.map((cluster, idx) => {
-    const pickupPoint = {
-      lat: cluster.centroid.lat,
-      lng: cluster.centroid.lng,
-      name: `集合ポイント${idx + 1}`,
-    };
-
-    const routeResult = optimizeRoute(temple, [pickupPoint]);
-
+  pickupPoint: { lat: number; lng: number }
+): { id: string; name: string; distanceMeters: number; walkingMinutes: number; warning: boolean }[] {
+  return members.map((m) => {
+    const meters = walkingDistanceMeters(m, pickupPoint);
     return {
-      clusterIndex: idx,
-      members: cluster.points.map((p) => p.id),
-      pickupPoint,
-      estimatedTime: routeResult.estimatedMinutes,
-      distance: routeResult.totalDistance,
+      id: m.id,
+      name: m.name,
+      distanceMeters: meters,
+      walkingMinutes: walkingTimeMinutes(meters),
+      warning: meters > 500, // 500m = client spec "徒歩圏内"
     };
   });
 }
-
-export { distance };

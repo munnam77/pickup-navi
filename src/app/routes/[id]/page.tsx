@@ -53,7 +53,7 @@ export default function RouteDetailPage() {
                 ...rt,
                 color: db.vehicles.find((v) => v.id === rt.vehicleId)?.color || vehicleColors[idx],
                 vehicleName: db.vehicles.find((v) => v.id === rt.vehicleId)?.name || `車両${idx + 1}`,
-                memberDetails: rt.members.map((mid) => db.members.find((m) => m.id === mid)!).filter(Boolean),
+                memberDetails: rt.members.map((mid) => db.members.find((m) => m.id === mid)).filter((m): m is NonNullable<typeof m> => m != null),
               }))}
             />
           </div>

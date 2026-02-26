@@ -1,7 +1,7 @@
 "use client";
 import AppShell from "@/components/AppShell";
 import db from "@/data/db.json";
-import { kMeansClustering, optimizeRoute, distance } from "@/lib/routing";
+import { capacityAwareClustering, optimizeRoute, distance, memberWalkingInfo } from "@/lib/routing";
 import { useState, useMemo, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import {
@@ -16,8 +16,8 @@ import {
   RotateCcw,
   ChevronDown,
   ChevronUp,
-  Accessibility,
-  Phone,
+  AlertTriangle,
+  Footprints,
 } from "lucide-react";
 import dynamic from "next/dynamic";
 
@@ -29,6 +29,7 @@ interface GeneratedRoute {
   pickupPoints: { name: string; lat: number; lng: number }[];
   estimatedTime: number;
   distance: number;
+  walkingInfo: { id: string; name: string; distanceMeters: number; walkingMinutes: number; warning: boolean }[];
 }
 
 // Nearby landmark names for generated pickup points
@@ -79,8 +80,9 @@ function RoutePlannerContent() {
       .filter((m): m is NonNullable<typeof m> => m !== null && m !== undefined)
       .map((m) => ({ id: m.id, lat: m.lat, lng: m.lng, name: m.name }));
 
-    const numVehicles = activeVehicles.length;
-    const clusters = kMeansClustering(points, numVehicles);
+    // Capacity-aware clustering: respects vehicle seat limits
+    const vehicleCapacities = activeVehicles.map((v) => v.capacity);
+    const clusters = capacityAwareClustering(points, vehicleCapacities);
 
     // If wheelchair members exist, ensure they go to accessible vehicles
     const accessibleVehicleIds = activeVehicles.filter((v) => v.wheelchairAccessible).map((v) => v.id);
@@ -98,11 +100,19 @@ function RoutePlannerContent() {
         lng: cluster.centroid.lng,
       };
 
-      // Optimize route: temple -> pickup -> temple
+      // Optimize route: temple -> pickup points ONLY -> return to temple
+      // Vehicle does NOT visit member homes — members WALK to pickup points
       const routeResult = optimizeRoute(
         { lat: db.temple.lat, lng: db.temple.lng },
-        [pickupPoint, ...cluster.points.map((p) => ({ lat: p.lat, lng: p.lng }))]
+        [pickupPoint]
       );
+
+      // Calculate walking distance for each member to their pickup point
+      const memberDetails = cluster.points.map((p) => {
+        const member = db.members.find((m) => m.id === p.id);
+        return { id: p.id, lat: p.lat, lng: p.lng, name: member?.name || "" };
+      });
+      const walkingInfo = memberWalkingInfo(memberDetails, pickupPoint);
 
       return {
         vehicleId,
@@ -110,6 +120,7 @@ function RoutePlannerContent() {
         pickupPoints: [pickupPoint],
         estimatedTime: routeResult.estimatedMinutes,
         distance: routeResult.totalDistance,
+        walkingInfo,
       };
     });
 
@@ -119,11 +130,17 @@ function RoutePlannerContent() {
         if (!wm) continue;
         const currentRoute = routes.find((r) => r.members.includes(wm.id));
         if (currentRoute && !accessibleVehicleIds.includes(currentRoute.vehicleId)) {
-          // Move to first accessible vehicle's route
           const accessibleRoute = routes.find((r) => accessibleVehicleIds.includes(r.vehicleId));
           if (accessibleRoute) {
             currentRoute.members = currentRoute.members.filter((id) => id !== wm.id);
+            currentRoute.walkingInfo = currentRoute.walkingInfo.filter((w) => w.id !== wm.id);
             accessibleRoute.members.push(wm.id);
+            // Recalculate walking info for moved member
+            const wmData = db.members.find((m) => m.id === wm.id);
+            if (wmData && accessibleRoute.pickupPoints[0]) {
+              const wi = memberWalkingInfo([{ id: wmData.id, lat: wmData.lat, lng: wmData.lng, name: wmData.name }], accessibleRoute.pickupPoints[0]);
+              accessibleRoute.walkingInfo.push(...wi);
+            }
           }
         }
       }
@@ -136,6 +153,9 @@ function RoutePlannerContent() {
   function saveRoute() {
     setSaved(true);
   }
+
+  // Total warnings across all routes
+  const totalWarnings = generated?.reduce((s, r) => s + r.walkingInfo.filter((w) => w.warning).length, 0) || 0;
 
   const mapRoutes = useMemo(() => {
     if (!generated) return [];
@@ -223,6 +243,24 @@ function RoutePlannerContent() {
                       </div>
                     </label>
                   ))}
+                </div>
+              )}
+
+              {/* Capacity warning */}
+              {event && activeVehicles.length > 0 && (
+                <div className="mt-2">
+                  {(() => {
+                    const totalCap = activeVehicles.reduce((s, v) => s + v.capacity, 0);
+                    const needed = attendees.length;
+                    if (totalCap < needed) {
+                      return (
+                        <div className="p-2 rounded-lg bg-red-50 text-xs text-red-700">
+                          ⚠️ 定員不足: {totalCap}名分の座席に対して{needed}名の参加者がいます
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
                 </div>
               )}
 
@@ -329,9 +367,11 @@ function RoutePlannerContent() {
                     <p className="text-[11px] text-slate-500">最長時間（分）</p>
                   </div>
                   <div className="bg-white rounded-xl border border-slate-200 p-3 text-center">
-                    <MapPin size={16} className="mx-auto text-violet-500 mb-1" />
-                    <p className="text-lg font-bold text-slate-900">{generated.reduce((s, r) => s + r.distance, 0).toFixed(1)}</p>
-                    <p className="text-[11px] text-slate-500">合計距離（km）</p>
+                    <Footprints size={16} className={`mx-auto mb-1 ${totalWarnings > 0 ? "text-amber-500" : "text-emerald-500"}`} />
+                    <p className={`text-lg font-bold ${totalWarnings > 0 ? "text-amber-600" : "text-slate-900"}`}>
+                      {totalWarnings > 0 ? `${totalWarnings}名` : "OK"}
+                    </p>
+                    <p className="text-[11px] text-slate-500">{totalWarnings > 0 ? "500m超の方" : "全員徒歩圏内"}</p>
                   </div>
                 </div>
 
@@ -339,6 +379,7 @@ function RoutePlannerContent() {
                 {generated.map((rt, idx) => {
                   const vehicle = db.vehicles.find((v) => v.id === rt.vehicleId);
                   const members = rt.members.map((mid) => db.members.find((m) => m.id === mid)).filter(Boolean);
+                  const overCapacity = vehicle && rt.members.length > vehicle.capacity;
 
                   return (
                     <div key={rt.vehicleId} className="bg-white rounded-xl border border-slate-200 p-4">
@@ -350,24 +391,55 @@ function RoutePlannerContent() {
                           <Truck size={16} style={{ color: vehicle?.color || "#6B7280" }} />
                         </div>
                         <div className="flex-1">
-                          <p className="text-sm font-semibold text-slate-900">{vehicle?.name}</p>
-                          <p className="text-[11px] text-slate-500">{rt.estimatedTime}分 · {rt.distance}km · {rt.members.length}名</p>
+                          <p className="text-sm font-semibold text-slate-900">
+                            {vehicle?.name}
+                            {overCapacity && (
+                              <span className="ml-2 text-xs text-red-600 font-normal">⚠️ 定員超過</span>
+                            )}
+                          </p>
+                          <p className="text-[11px] text-slate-500">
+                            {rt.estimatedTime}分 · {rt.distance}km · {rt.members.length}/{vehicle?.capacity || "?"}名
+                          </p>
                         </div>
                       </div>
-                      <div className="flex flex-wrap gap-1.5">
+
+                      {/* Pickup Point */}
+                      <div className="flex flex-wrap gap-1.5 mb-3">
                         {rt.pickupPoints.map((pp, i) => (
                           <span key={i} className="text-[11px] px-2 py-1 rounded-full bg-slate-100 text-slate-600 flex items-center gap-1">
                             <Navigation size={10} />{pp.name}
                           </span>
                         ))}
                       </div>
-                      <div className="mt-2 flex flex-wrap gap-1">
-                        {members.map((m) => m && (
-                          <span key={m.id} className="text-[11px] px-2 py-0.5 rounded-full bg-slate-50 text-slate-600">
-                            {m.name}
-                            {m.mobility !== "normal" && " ⚠️"}
-                          </span>
-                        ))}
+
+                      {/* Walking Distance Table */}
+                      <div className="bg-slate-50 rounded-lg p-3">
+                        <h4 className="text-[11px] font-medium text-slate-500 mb-2 flex items-center gap-1">
+                          <Footprints size={12} />
+                          各檀家様の徒歩距離
+                        </h4>
+                        <div className="space-y-1">
+                          {rt.walkingInfo.map((w) => {
+                            const member = db.members.find((m) => m.id === w.id);
+                            return (
+                              <div key={w.id} className={`flex items-center gap-2 text-xs py-1 px-2 rounded ${w.warning ? "bg-amber-50" : ""}`}>
+                                <span className="text-slate-700 flex-1">{w.name}</span>
+                                {member?.mobility !== "normal" && (
+                                  <span className="text-[10px] px-1 py-0.5 rounded bg-amber-100 text-amber-700">
+                                    {member?.mobility === "wheelchair" ? "♿" : member?.mobility === "walker" ? "🚶" : "🦯"}
+                                  </span>
+                                )}
+                                <span className={`font-mono ${w.warning ? "text-amber-600 font-medium" : "text-slate-500"}`}>
+                                  {w.distanceMeters}m
+                                </span>
+                                <span className={`${w.warning ? "text-amber-600" : "text-slate-400"}`}>
+                                  約{w.walkingMinutes}分
+                                </span>
+                                {w.warning && <AlertTriangle size={12} className="text-amber-500" />}
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
                     </div>
                   );
