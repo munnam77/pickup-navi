@@ -1,7 +1,7 @@
 "use client";
 import AppShell from "@/components/AppShell";
 import db from "@/data/db.json";
-import { capacityAwareClustering, optimizeRoute, distance, memberWalkingInfo, snapToNearestLocation } from "@/lib/routing";
+import { capacityAwareClustering, optimizeRoute, memberWalkingInfo, snapToNearestLocation } from "@/lib/routing";
 import { useState, useMemo, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import {
@@ -135,7 +135,7 @@ function RoutePlannerContent() {
             // Recalculate walking info for moved member
             const wmData = db.members.find((m) => m.id === wm.id);
             if (wmData && accessibleRoute.pickupPoints[0]) {
-              const wi = memberWalkingInfo([{ id: wmData.id, lat: wmData.lat, lng: wmData.lng, name: wmData.name }], accessibleRoute.pickupPoints[0]);
+              const wi = memberWalkingInfo([{ id: wmData.id, lat: wmData.lat, lng: wmData.lng, name: wmData.name, mobility: wmData.mobility }], accessibleRoute.pickupPoints[0]);
               accessibleRoute.walkingInfo.push(...wi);
             }
           }
@@ -390,7 +390,7 @@ function RoutePlannerContent() {
                     <p className={`text-lg font-bold ${totalWarnings > 0 ? "text-amber-600" : "text-slate-900"}`}>
                       {totalWarnings > 0 ? `${totalWarnings}名` : "OK"}
                     </p>
-                    <p className="text-[11px] text-slate-500">{totalWarnings > 0 ? "500m超の方" : "全員徒歩圏内"}</p>
+                    <p className="text-[11px] text-slate-500">{totalWarnings > 0 ? "徒歩注意" : "全員徒歩圏内"}</p>
                   </div>
                 </div>
 

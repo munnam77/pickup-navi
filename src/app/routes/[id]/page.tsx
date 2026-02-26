@@ -26,8 +26,8 @@ interface SavedRoute {
   status: string;
 }
 
-function googleMapsUrl(lat: number, lng: number, name: string) {
-  return `https://www.google.com/maps/search/?api=1&query=${lat},${lng}&query_place_id=${encodeURIComponent(name)}`;
+function googleMapsUrl(lat: number, lng: number) {
+  return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
 }
 
 export default function RouteDetailPage() {
@@ -168,13 +168,13 @@ export default function RouteDetailPage() {
                           {pp.name}
                         </span>
                         <a
-                          href={googleMapsUrl(pp.lat, pp.lng, pp.name)}
+                          href={googleMapsUrl(pp.lat, pp.lng)}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="flex items-center gap-1 text-[11px] text-blue-600 hover:text-blue-800 transition print:hidden"
                         >
                           <ExternalLink size={11} />
-                          地図
+                          ナビ
                         </a>
                       </div>
                     ))}
