@@ -27,7 +27,6 @@ export default function RoutesPage() {
 
   useEffect(() => {
     const stored = JSON.parse(localStorage.getItem("pn-saved-routes") || "[]") as RouteEntry[];
-    // Merge: db.json routes + localStorage routes (no duplicates by eventId)
     const dbEventIds = new Set(db.savedRoutes.map((r) => r.eventId));
     const lsOnly = stored.filter((r) => !dbEventIds.has(r.eventId));
     setAllRoutes([...lsOnly, ...(db.savedRoutes as RouteEntry[])]);
@@ -37,52 +36,52 @@ export default function RoutesPage() {
     <AppShell>
       <div className="max-w-5xl mx-auto animate-fadeIn">
         <div className="mb-6">
-          <h1 className="text-xl font-bold text-slate-900">ルート履歴</h1>
-          <p className="text-sm text-slate-500">{allRoutes.length}件のルート</p>
+          <h1 className="text-2xl font-bold text-slate-900">ルート履歴</h1>
+          <p className="text-sm text-slate-500 mt-1">{allRoutes.length}件のルート</p>
         </div>
 
         <div className="space-y-4">
           {allRoutes.map((r) => (
             <div
               key={r.id}
-              className="bg-white rounded-xl border border-slate-200 p-5 hover:shadow-sm transition cursor-pointer"
+              className="bg-white rounded-xl border border-slate-200 p-5 hover:shadow-sm transition cursor-pointer active:bg-slate-50"
               onClick={() => router.push(`/routes/${r.id}`)}
             >
               <div className="flex items-center gap-4 mb-4">
-                <div className="w-12 h-12 rounded-xl bg-violet-100 flex items-center justify-center">
+                <div className="w-12 h-12 rounded-xl bg-violet-100 flex items-center justify-center shrink-0">
                   <Route size={22} className="text-violet-600" />
                 </div>
-                <div className="flex-1">
-                  <h3 className="font-semibold text-slate-900">{r.eventName}</h3>
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-bold text-base text-slate-900">{r.eventName}</h3>
                   <p className="text-sm text-slate-500">{r.date}</p>
                 </div>
                 {r.status === "active" && (
-                  <span className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-medium">新規</span>
+                  <span className="text-sm px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-medium">新規</span>
                 )}
-                <ChevronRight size={20} className="text-slate-400" />
+                <ChevronRight size={20} className="text-slate-400 shrink-0" />
               </div>
 
               {/* Route Summary Stats */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <div className="bg-slate-50 rounded-lg p-3 text-center">
+                <div className="bg-slate-50 rounded-xl p-3 text-center">
                   <Users size={16} className="mx-auto text-blue-500 mb-1" />
-                  <p className="text-lg font-bold text-slate-900">{r.totalMembers}</p>
-                  <p className="text-[11px] text-slate-500">乗車人数</p>
+                  <p className="text-xl font-bold text-slate-900">{r.totalMembers}</p>
+                  <p className="text-sm text-slate-500">乗車人数</p>
                 </div>
-                <div className="bg-slate-50 rounded-lg p-3 text-center">
+                <div className="bg-slate-50 rounded-xl p-3 text-center">
                   <Truck size={16} className="mx-auto text-emerald-500 mb-1" />
-                  <p className="text-lg font-bold text-slate-900">{r.routes.length}</p>
-                  <p className="text-[11px] text-slate-500">使用車両</p>
+                  <p className="text-xl font-bold text-slate-900">{r.routes.length}</p>
+                  <p className="text-sm text-slate-500">使用車両</p>
                 </div>
-                <div className="bg-slate-50 rounded-lg p-3 text-center">
+                <div className="bg-slate-50 rounded-xl p-3 text-center">
                   <Clock size={16} className="mx-auto text-orange-500 mb-1" />
-                  <p className="text-lg font-bold text-slate-900">{r.routes.reduce((s, rt) => s + rt.estimatedTime, 0)}</p>
-                  <p className="text-[11px] text-slate-500">合計時間（分）</p>
+                  <p className="text-xl font-bold text-slate-900">{r.routes.reduce((s, rt) => s + rt.estimatedTime, 0)}</p>
+                  <p className="text-sm text-slate-500">合計時間（分）</p>
                 </div>
-                <div className="bg-slate-50 rounded-lg p-3 text-center">
+                <div className="bg-slate-50 rounded-xl p-3 text-center">
                   <MapPin size={16} className="mx-auto text-violet-500 mb-1" />
-                  <p className="text-lg font-bold text-slate-900">{r.routes.reduce((s, rt) => s + rt.distance, 0).toFixed(1)}</p>
-                  <p className="text-[11px] text-slate-500">合計距離（km）</p>
+                  <p className="text-xl font-bold text-slate-900">{r.routes.reduce((s, rt) => s + rt.distance, 0).toFixed(1)}</p>
+                  <p className="text-sm text-slate-500">合計距離（km）</p>
                 </div>
               </div>
 
@@ -93,7 +92,7 @@ export default function RoutesPage() {
                   return (
                     <span
                       key={rt.vehicleId}
-                      className="text-xs px-2.5 py-1 rounded-full font-medium"
+                      className="text-sm px-3 py-1.5 rounded-full font-medium"
                       style={{ backgroundColor: (vehicle?.color || "#6B7280") + "18", color: vehicle?.color || "#6B7280" }}
                     >
                       {vehicle?.name} · {rt.members.length}名 · {rt.estimatedTime}分
@@ -105,8 +104,15 @@ export default function RoutesPage() {
           ))}
 
           {allRoutes.length === 0 && (
-            <div className="py-12 text-center text-slate-400 text-sm bg-white rounded-xl border border-slate-200">
-              ルート履歴がありません
+            <div className="py-12 text-center bg-white rounded-xl border border-slate-200">
+              <Route size={48} className="mx-auto mb-3 text-slate-300" />
+              <p className="text-base text-slate-400">ルート履歴がありません</p>
+              <button
+                onClick={() => router.push("/route-planner")}
+                className="text-sm text-orange-600 hover:underline mt-2 cursor-pointer font-medium"
+              >
+                ルートを作成する →
+              </button>
             </div>
           )}
         </div>

@@ -11,6 +11,21 @@ body {
   background: var(--color-background);
   color: var(--color-foreground);
   font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Improved tap targets for elderly users */
+@media (pointer: coarse) {
+  button, a, select, input {
+    min-height: 44px;
+  }
+}
+
+/* Print styles */
+@media print {
+  body { background: white; }
+  .print\:hidden { display: none !important; }
 }
 
 @keyframes fadeIn {
